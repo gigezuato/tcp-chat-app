@@ -1,6 +1,10 @@
 import socket
 import os
 from dotenv import load_dotenv
+import threading
+
+clientes = []
+nomes_usuarios = []
 
 def carregar_configs():
     load_dotenv()
@@ -23,7 +27,7 @@ def aceita_cliente(server_socket):
     return client_socket
 
 
-def recebe_mensagens(client_socket):
+def recebe_mensagens(client_socket, nome_usuario):
     while True:
         try:
             mensagem = client_socket.recv(1024).decode()
@@ -36,6 +40,34 @@ def recebe_mensagens(client_socket):
             break
 
         print(f"Mensagem recebida: {mensagem}")
+        broadcast(mensagem, client_socket)
+
+    try:
+        client_socket.close()
+    except:
+        pass
+
+    if client_socket in clientes:
+        index = clientes.index(client_socket)
+        clientes.remove(client_socket)
+        nomes_usuarios.pop(index)
+        
+    broadcast(f"{nome_usuario} saiu do chat", client_socket)
+
+
+def broadcast(mensagem, sender):
+    for cliente in clientes[:]:
+        if cliente != sender:
+            try:
+                cliente.send(mensagem.encode())
+            except Exception as e:
+                print(f"Erro ao enviar mensagem: {e}")
+                try:
+                    cliente.close()
+                except:
+                    pass
+                if cliente in clientes:
+                    clientes.remove(cliente)
 
 
 def main():
@@ -44,11 +76,17 @@ def main():
 
     print(f"Servidor iniciado em {host} : {porta}")
 
-    client_socket = aceita_cliente(server_socket)
-    recebe_mensagens(client_socket)
+    while True:
+        client_socket = aceita_cliente(server_socket)
+        nome_usuario = client_socket.recv(1024).decode()
 
-    client_socket.close()
-    server_socket.close()
+        clientes.append(client_socket)
+        nomes_usuarios.append(nome_usuario)
+
+        broadcast(f"{nome_usuario} entrou no chat", client_socket)
+
+        thread_cliente = threading.Thread(target=recebe_mensagens, args=(client_socket, nome_usuario))
+        thread_cliente.start()
 
 
 if __name__ == "__main__":

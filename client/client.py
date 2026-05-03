@@ -1,6 +1,8 @@
 import socket
 import os
 from dotenv import load_dotenv
+import threading
+
 
 def carregar_configs():
     load_dotenv()
@@ -16,27 +18,66 @@ def cria_socket_cliente():
 
 def conecta_servidor(client_socket, host, porta):
     client_socket.connect((host, porta))
-    print("Conectado ao servidor")
+    print(f"Conectado ao servidor")
 
 
-def envia_mensagens(client_socket):
+def envia_mensagens(client_socket, nome_usuario):
     while True:
-        mensagem = input("Digite uma mensagem: ")
+        try:
+            mensagem = input("Digite uma mensagem: ")
 
-        if mensagem.lower() == "sair":
+            if mensagem.lower() == "/ajuda":
+                print("Comandos disponíveis:")
+                print("/sair - sair do chat")
+                print("/ajuda - mostrar comandos")
+                continue
+            if mensagem.lower() == "/sair":
+                client_socket.shutdown(socket.SHUT_RDWR)
+                break
+            
+            mensagem_formatada = f"[{nome_usuario}]: {mensagem}"
+            client_socket.send(mensagem_formatada.encode())
+
+        except OSError:
+            break
+        except Exception as e:
+            print(f"Erro ao enviar mensagem: {e}")
             break
 
-        client_socket.send(mensagem.encode())
+
+def recebe_mensagens(client_socket):
+    while True:
+        try:
+            mensagem = client_socket.recv(1024).decode()
+
+            if not mensagem:
+                print("Servidor encerrou a conexão")
+                break
+
+            print(f"\n{mensagem}")
+            print("Digite uma mensagem: ", end="")
+            
+        except OSError:
+            break
+        except Exception as e:
+            print(f"Erro ao receber mensagem: {e}")
+            break   
 
 
 def main():
     host, porta = carregar_configs()
     client_socket = cria_socket_cliente()
 
+    nome_usuario = input("Digite seu nome: ")
+
     conecta_servidor(client_socket, host, porta)
-    envia_mensagens(client_socket)
+    client_socket.send(nome_usuario.encode())
+    thread_receber = threading.Thread(target=recebe_mensagens, args=(client_socket,), daemon=True)
+    thread_receber.start()
+    envia_mensagens(client_socket, nome_usuario)
     
     client_socket.close()
+    print(f"Conexão encerrada")
 
 
 if __name__ == "__main__":
